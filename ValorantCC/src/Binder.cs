@@ -113,4 +113,9 @@ namespace ValorantCC
         public List<string> settingsProfiles { get; set; }
     }
 
+    public partial class FetchResponseData
+    {
+        public Data data { get; set; }
+    }
+
 }

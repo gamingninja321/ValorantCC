@@ -1,6 +1,7 @@
 ﻿using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
@@ -91,6 +92,7 @@ namespace Utilities
             headers.Add("X-Riot-Entitlements-JWT", auth.AuthTokens.Token);
             headers.Add("X-Riot-ClientVersion", auth.Version);
             headers.Add("X-Riot-ClientPlatform", "ew0KCSJwbGF0Zm9ybVR5cGUiOiAiUEMiLA0KCSJwbGF0Zm9ybU9TIjogIldpbmRvd3MiLA0KCSJwbGF0Zm9ybU9TVmVyc2lvbiI6ICIxMC4wLjE5MDQyLjEuMjU2LjY0Yml0IiwNCgkicGxhdGZvcm1DaGlwc2V0IjogIlVua25vd24iDQp9");
+            Log("Headers constructed at version: "+auth.Version);
             return headers;
         }
 
@@ -98,6 +100,7 @@ namespace Utilities
         {
             StringBuilder.Append($"{DateTimeOffset.Now} | {Text}\n");
             File.AppendAllText(LoggingFile, StringBuilder.ToString());
+            Trace.WriteLine(StringBuilder.ToString());
             StringBuilder.Clear();
         }
         public static string LoginResponse(Processor processor)

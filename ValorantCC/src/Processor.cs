@@ -1,4 +1,5 @@
 ﻿using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RestSharp;
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,7 @@ namespace ValorantCC
         public bool ProfileListed;
         public List<string> ProfileNames;
         private ProfileList FetchedProfiles;
+        bool ws = true;
         public int CurrentProfile;
         //Haruki's "bug" fix
         private Color[] DefaultColors = new Color[8];
@@ -40,7 +42,7 @@ namespace ValorantCC
             AuthResponse = await AuthObj.StartAuth();
             if (!AuthResponse.Success) return AuthResponse;
             Utilities.Utils.Log("Auth Success");
-            await Construct();
+            AuthResponse.Success = await Construct();
             return AuthResponse;
         }
 
@@ -128,17 +130,42 @@ namespace ValorantCC
             Utilities.Utils.Log("Obtaining User Settings");
             RestRequest request = new RestRequest("/playerPref/v3/getPreference/Ares.PlayerSettings", Method.Get);
             request.AddHeaders(Utilities.Utils.ConstructHeaders(AuthResponse));
-            string responseContent = (await client.ExecuteAsync(request)).Content;
-            RestResponse resp = await client.ExecuteAsync(request);
-            Dictionary<string, object> response = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseContent);
+            Utilities.Utils.Log("Requesting user settings from Riot API");
+            var response = (await client.ExecuteAsync(request));
+            string responseContent = response.Content;
+            Utilities.Utils.Log($"Fetch response: ({response.StatusCode}) {responseContent}");
             Data settings = new Data();
-            try
+
+            if (!response.IsSuccessful)
             {
-                settings = Utilities.Utils.Decompress(Convert.ToString(response["data"]));
+                Utilities.Utils.Log($"playerperf failed. Trying web socket...");
+                request = new RestRequest($"{AuthResponse.LockfileData.Protocol}://127.0.0.1:{AuthResponse.LockfileData.Port}/player-preferences/v1/data-json/Ares.PlayerSettings", Method.Get);
+                request.AddHeader("Authorization", $"Basic {AuthResponse.LockfileData.Basic}");
+
+                response = await new RestClient(new RestClientOptions()
+                {
+                    RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true
+                }).ExecuteAsync(request);
+                responseContent = response.Content;
+                Utilities.Utils.Log($"WS response: ({response.StatusCode}) {responseContent}");
+                ws = true;
             }
-            catch (KeyNotFoundException)
+            if (ws)
             {
-                return settings;
+                FetchResponseData resp = JsonConvert.DeserializeObject<FetchResponseData>(responseContent);
+                return resp.data;
+            }
+            else
+            {
+                Dictionary<string, object> resp = JsonConvert.DeserializeObject<Dictionary<string, object>>(responseContent);
+                try
+                {
+                    settings = Utilities.Utils.Decompress(Convert.ToString(resp["data"]));
+                }catch(KeyNotFoundException)
+                {
+                    return settings;
+                }
+                
             }
 
             return settings;
@@ -147,12 +174,26 @@ namespace ValorantCC
         private async Task<bool> putUserSettings(Data newData)
         {
             Utilities.Utils.Log("Saving New Data: (BACKUP) " + JsonConvert.SerializeObject(newData));
+            RestRequest request;
+            RestResponse response;
+            if (!ws)
+            {
+                request = new RestRequest("/playerPref/v3/savePreference", Method.Put);
+                request.AddHeaders(Utilities.Utils.ConstructHeaders(AuthResponse));
+                request.AddJsonBody(new { type = "Ares.PlayerSettings", data = Utilities.Utils.Compress(newData) });
 
-            RestRequest request = new RestRequest("/playerPref/v3/savePreference", Method.Put);
-            request.AddHeaders(Utilities.Utils.ConstructHeaders(AuthResponse));
-            request.AddJsonBody(new { type = "Ares.PlayerSettings", data = Utilities.Utils.Compress(newData) });
+                response = await client.ExecuteAsync(request);
+            }
+            else
+            {
+                request = new RestRequest($"{AuthResponse.LockfileData.Protocol}://127.0.0.1:{AuthResponse.LockfileData.Port}/player-preferences/v1/data-json/Ares.PlayerSettings", Method.Put);
+                request.AddHeader("Authorization", $"Basic {AuthResponse.LockfileData.Basic}");
+                request.AddJsonBody(newData);
 
-            RestResponse response = await client.ExecuteAsync(request);
+                response = await new RestClient(new RestClientOptions() {
+                    RemoteCertificateValidationCallback = (sender, certificate, chain, sslPolicyErrors) => true
+                }).ExecuteAsync(request);
+            }
             if (!response.IsSuccessful)
             {
                 Utilities.Utils.Log("savePreference Unsuccessfull: " + response.Content.ToString());

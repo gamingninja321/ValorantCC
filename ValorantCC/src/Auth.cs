@@ -2,6 +2,7 @@
 using RestSharp;
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 namespace ValorantCC
@@ -126,7 +127,8 @@ namespace ValorantCC
             RestRequest request = new RestRequest("https://valorant-api.com/v1/version", Method.Get);
 
             RestResponse response = await client.ExecuteAsync(request);
-            if (!response.IsSuccessful) return "0.0.0";
+            Utilities.Utils.Log($"Valorant-API Response: {response.Content}");
+            if (!response.IsSuccessful) return "release-04.03-shipping-6-671292";
 
             VersionResponse RespData = JsonConvert.DeserializeObject<VersionResponse>(response.Content.ToString());
             return RespData.Data.RiotClientVersion;
